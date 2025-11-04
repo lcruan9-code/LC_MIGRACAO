@@ -1,0 +1,311 @@
+Explicação Detalhada do Código da Aplicação de Migração SQL
+Esta documentação detalha a estrutura e o funcionamento dos principais arquivos da sua aplicação de migração de banco de dados, explicando o propósito de cada classe, seus métodos e como eles interagem para formar o sistema funcional.
+
+1. AppConfig.java
+Caminho: config/AppConfig.java
+
+Propósito: Esta classe é responsável por carregar e gerenciar as configurações de conexão com o banco de dados a partir de um arquivo externo chamado rede.txt. Ela atua como um centralizador para as credenciais e parâmetros do servidor MySQL, garantindo que a aplicação possa se conectar a ele.
+
+Componentes e Métodos Principais:
+private Properties props;: Um objeto Properties que armazena os pares chave-valor lidos do arquivo rede.txt.
+
+private static final String CONFIG_FILE = "rede.txt";: Define o nome do arquivo de configuração.
+
+public AppConfig(): O construtor da classe. Ele inicializa o objeto Properties e chama o método loadConfig() para carregar as configurações.
+
+private void loadConfig():
+
+Define valores padrão para IP, Porta, Usuário, Senha, DB, Tipo de Terminal e ID da Empresa. Isso é uma salvaguarda caso o rede.txt não seja encontrado ou esteja incompleto.
+
+Tenta ler o arquivo rede.txt linha por linha.
+
+Para cada linha, ele espera o formato CHAVE:VALOR. Ignora linhas vazias ou que começam com # (comentários).
+
+Armazena as chaves e valores lidos no objeto props.
+
+Inclui tratamento de erros (IOException) caso o arquivo não possa ser lido.
+
+public String getDbUrl(): Constrói e retorna a URL de conexão JDBC para o MySQL, usando o IP e a Porta lidos do rede.txt. Se o nome do banco de dados (DB) estiver vazio no rede.txt, ele constrói uma URL que se conecta apenas ao servidor, sem selecionar um banco de dados específico inicialmente.
+
+public String getDbUser(): Retorna o nome de usuário do banco de dados.
+
+public String getDbPassword(): Retorna a senha do banco de dados.
+
+public String getDefaultDb(): Retorna o nome do banco de dados padrão, se configurado no rede.txt.
+
+public void updateDefaultDb(String newDefaultDb): Permite atualizar o nome do banco de dados padrão em memória.
+
+public String getTerminalTipo() / public String getIdEmpresaPadrao(): Métodos para obter outras configurações específicas da aplicação.
+
+2. DatabaseManager.java
+Caminho: model/DatabaseManager.java
+
+Propósito: Esta é a classe central para todas as interações com o banco de dados MySQL. Ela encapsula a lógica de conexão, desconexão, listagem de bancos de dados, seleção de um banco de dados específico e, crucialmente, a execução de scripts SQL complexos.
+
+Componentes e Métodos Principais:
+private AppConfig appConfig;: Uma instância de AppConfig para obter as credenciais de conexão.
+
+private Connection connection;: O objeto Connection do JDBC, que representa a sessão ativa com o banco de dados.
+
+private String currentDatabase;: Armazena o nome do banco de dados que está atualmente selecionado (via comando USE).
+
+public DatabaseManager(AppConfig appConfig): Construtor que recebe a configuração da aplicação e carrega o driver JDBC.
+
+private void loadJdbcDriver():
+
+Tenta carregar o driver JDBC para MySQL (com.mysql.jdbc.Driver).
+
+É crucial para estabelecer a comunicação entre a aplicação Java e o servidor MySQL.
+
+Inclui tratamento de erros para ClassNotFoundException.
+
+public void connect():
+
+Estabelece a conexão física com o servidor MySQL usando as informações do AppConfig.
+
+Verifica se já existe uma conexão ativa para evitar reconexões desnecessárias.
+
+Inclui tratamento de erros (SQLException).
+
+public void disconnect(): Fecha a conexão ativa com o banco de dados, liberando recursos.
+
+public List<String> getAllDatabases():
+
+Conecta-se ao MySQL (se ainda não estiver conectado).
+
+Executa o comando SHOW DATABASES para listar todos os bancos de dados disponíveis.
+
+Filtra e exclui bancos de dados padrão do sistema (como information_schema, mysql, performance_schema, sys).
+
+Retorna uma lista de nomes de bancos de dados.
+
+public void selectDatabase(String dbName):
+
+Executa o comando USE \" + dbName + "`` no servidor MySQL.
+
+Isso muda o contexto do banco de dados para a sessão atual, fazendo com que os comandos SQL subsequentes sejam executados nesse banco de dados.
+
+Atualiza a variável currentDatabase.
+
+Inclui tratamento de erros.
+
+public String getCurrentDatabase(): Retorna o nome do banco de dados atualmente selecionado.
+
+public void executeSqlScript(File sqlFile, String targetDatabaseName):
+
+Método central para execução do script de migração.
+
+Verifica se a conexão está ativa e se o nome do banco de dados de destino é válido.
+
+**stmt.execute("USE \" + targetDatabaseName + "`");**: **Este é um ponto crucial.** Garante que o script será executado no banco de dados selecionado pelo usuário, independentemente de qualquer configuração padrão no rede.txt`.
+
+connection.setAutoCommit(false);: Desativa o modo de auto-commit. Isso significa que todas as operações SQL subsequentes (como DROP TABLE, CREATE TABLE, INSERT) farão parte de uma única transação. As alterações só serão permanentes se connection.commit() for chamado.
+
+Lê o arquivo SQL linha por linha usando BufferedReader.
+
+Lógica de Parsing Robusta:
+
+Acumula linhas em um StringBuilder (currentCommandBuilder).
+
+Ignora linhas vazias e comentários de linha única (--, #).
+
+Gerencia comentários de bloco (/* ... */) para que o conteúdo dentro deles não seja interpretado como SQL.
+
+Detecta o fim de um comando SQL quando uma linha termina com ; (fora de comentários).
+
+Quando um comando completo é identificado, ele é passado para executeSingleCommand().
+
+connection.commit();: Se todas as operações no script forem bem-sucedidas, esta linha torna as alterações permanentes no banco de dados.
+
+connection.rollback();: Em caso de qualquer SQLException ou IOException durante a execução do script, esta linha desfaz todas as alterações feitas na transação atual, garantindo a integridade dos dados.
+
+connection.setAutoCommit(true);: No bloco finally, o auto-commit é sempre reativado para retornar ao comportamento padrão.
+
+Chama listTables() após o commit para verificar as tabelas criadas.
+
+private void executeSingleCommand(Statement stmt, String sql, int lineNumber):
+
+Recebe um comando SQL individual (sem o ; final) e o executa usando stmt.execute().
+
+Imprime logs de pré e pós-execução, incluindo o número de linhas afetadas para comandos DML (como INSERT).
+
+Lida com ResultSet para comandos SELECT (embora não esperado em um script de migração de estrutura/dados).
+
+Propaga SQLException para que a transação principal possa fazer o rollback.
+
+public void listTables(String dbName): Lista as tabelas no banco de dados especificado.
+
+3. MainAppFrame.java
+Caminho: view/MainAppFrame.java
+
+Propósito: Esta é a janela principal da aplicação (a GUI). Ela configura a aparência da janela, inicializa as classes de lógica (AppConfig, DatabaseManager) e o painel de migração (MigratorPanel), e gerencia a conexão inicial com o banco de dados.
+
+Componentes e Métodos Principais:
+private AppConfig appConfig; / private DatabaseManager dbManager; / private MigratorPanel migratorPanel;: Instâncias das classes de dependência.
+
+private javax.swing.JTabbedPane jTabbedPane1; / private javax.swing.JPanel jPanel1; / private javax.swing.JLabel jLabel1;: Componentes da interface gráfica declarados como membros da classe para acesso global.
+
+public MainAppFrame(): O construtor da janela principal.
+
+Define o comportamento de fechamento da janela (DO_NOTHING_ON_CLOSE) e a torna não redimensionável e sem bordas (setUndecorated(true)).
+
+Adiciona um WindowListener para exibir uma mensagem ao usuário se ele tentar fechar a janela pelo botão 'X'.
+
+initComponents(): Método gerado automaticamente pelo NetBeans para inicializar e dispor os componentes da GUI.
+
+Inicializa appConfig e dbManager.
+
+Cria uma instância de MigratorPanel, passando dbManager e this (a própria MainAppFrame) como dependências.
+
+Adiciona o migratorPanel como uma aba no jTabbedPane1.
+
+Centraliza a janela na tela (setLocationRelativeTo(null)).
+
+initializeDatabaseConnectionAndUI(): Chamado para tentar conectar ao DB e popular a combobox de bancos de dados no MigratorPanel assim que a aplicação é iniciada.
+
+private void initializeDatabaseConnectionAndUI():
+
+Chama dbManager.connect() para estabelecer a conexão inicial com o servidor MySQL.
+
+Chama dbManager.getAllDatabases() para obter a lista de bancos de dados.
+
+Passa essa lista para migratorPanel.populateDatabaseComboBox() para preencher a combobox na interface.
+
+Inclui tratamento de erros para exibir mensagens ao usuário em caso de falha na conexão ou carregamento dos bancos de dados.
+
+public AppConfig getAppConfig(): Permite que outras classes (como MigratorPanel) acessem a instância de AppConfig.
+
+public static void main(String args[]): O método principal que inicia a aplicação Swing.
+
+Configura o Look and Feel da aplicação para "Nimbus".
+
+Cria e exibe uma nova instância de MainAppFrame na Event Dispatch Thread (EDT) do Swing.
+
+4. MigratorPanel.java
+Caminho: view/MigratorPanel.java
+
+Propósito: Este painel é a interface do usuário real onde o usuário interage para carregar scripts SQL (ou RARs contendo SQL), selecionar o banco de dados de destino e iniciar o processo de migração.
+
+Componentes e Métodos Principais:
+private DatabaseManager dbManager; / private MainAppFrame parentFrame; / private File loadedSqlFile;: Variáveis de dependência e estado para o painel.
+
+public MigratorPanel(DatabaseManager dbManager, MainAppFrame parentFrame): Construtor que recebe as dependências e chama addListeners().
+
+private void initComponents(): Método gerado pelo NetBeans para inicializar os componentes visuais do painel (ComboBox, JTextArea, Botões, Labels, TextFields).
+
+private void addListeners():
+
+jComboBox1.addActionListener() (Seleção de Banco de Dados):
+
+Este listener é ativado quando o usuário seleciona um item na combobox de bancos de dados.
+
+Importante: A seleção aqui é apenas visual. A conexão real com o banco de dados selecionado (via dbManager.selectDatabase()) foi intencionalmente movida para o momento em que o botão "Executar Script SQL" é clicado. Isso evita que a aplicação tente mudar de banco de dados a cada seleção na combobox, o que pode ser ineficiente ou causar erros se a seleção for incompleta.
+
+jButton3.addActionListener() (Carregar Arquivo - SQL ou RAR):
+
+Abre um JFileChooser para permitir que o usuário selecione um arquivo .sql ou .rar.
+
+Define filtros de arquivo para .sql e .rar.
+
+Se um arquivo .sql for selecionado, ele chama loadSqlFileToTextArea().
+
+Se um arquivo .rar for selecionado, ele chama handleRarFileSelection().
+
+Atualiza o jTextFieldFilePath com o caminho do arquivo selecionado.
+
+Armazena o File carregado em loadedSqlFile.
+
+jButton2.addActionListener() (Executar Script SQL):
+
+Ponto de gatilho da migração.
+
+Primeiro, verifica se um loadedSqlFile existe e se um banco de dados válido foi selecionado na combobox.
+
+dbManager.selectDatabase(selectedDbInComboBox);: Aqui é onde a conexão com o banco de dados realmente muda para o DB selecionado pelo usuário. Isso garante que o script será executado no contexto correto.
+
+Desabilita os botões "Executar" e "Cancelar" e muda o cursor para "espera" para indicar que uma operação está em andamento.
+
+SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() { ... }: Crucial para a responsividade da GUI. A execução do script SQL (que pode demorar) é feita em uma thread de fundo (doInBackground()). Isso evita que a interface do usuário "congele" durante a operação.
+
+Dentro de doInBackground(), ele chama dbManager.executeSqlScript(loadedSqlFile, finalCurrentDb).
+
+Exibe mensagens de sucesso ou erro usando JOptionPane.
+
+No método done(), que é executado na Event Dispatch Thread (EDT) após a conclusão da tarefa de fundo, os botões são reabilitados e o cursor é restaurado.
+
+jButton1.addActionListener() (Cancelar/Sair):
+
+Pede confirmação ao usuário antes de sair.
+
+Se confirmado, fecha a janela principal (parentFrame.dispose()), desconecta do banco de dados (dbManager.disconnect()) e encerra a aplicação (System.exit(0)).
+
+public void populateDatabaseComboBox(List<String> databases):
+
+Limpa os itens existentes na jComboBox1.
+
+Adiciona a opção "SELECIONE" como o primeiro item.
+
+Adiciona os nomes dos bancos de dados fornecidos pelo DatabaseManager à combobox.
+
+private void loadSqlFileToTextArea(File sqlFile):
+
+Lê o conteúdo de um arquivo SQL e o exibe no jTextArea1.
+
+Armazena a referência ao arquivo carregado em loadedSqlFile.
+
+private void handleRarFileSelection(File rarFile):
+
+Lida com a seleção de arquivos .rar.
+
+Usa a biblioteca junrar para ler o conteúdo do RAR.
+
+Lista todos os arquivos .sql encontrados dentro do RAR (incluindo subpastas).
+
+Se múltiplos arquivos SQL forem encontrados, apresenta uma JComboBox ao usuário para que ele selecione qual script deseja carregar.
+
+Lê o conteúdo do SQL selecionado do RAR e o exibe no jTextArea1.
+
+createTempSqlFile(): Cria um arquivo SQL temporário com o conteúdo extraído do RAR. Isso é necessário porque o DatabaseManager.executeSqlScript espera um objeto File para ler o script. O arquivo temporário é deletado ao sair da aplicação.
+
+private String readSqlFromRar(File rarFile, String sqlFileNameInRar): Método auxiliar para ler o conteúdo de um arquivo SQL específico dentro de um RAR.
+
+private File createTempSqlFile(String content, String originalFileName): Método auxiliar para criar um arquivo temporário em disco com o conteúdo SQL extraído de um RAR.
+
+Fluxo Geral da Aplicação:
+Inicialização (MainAppFrame):
+
+A janela principal é criada.
+
+AppConfig lê as configurações de rede.txt.
+
+DatabaseManager é inicializado com AppConfig e tenta conectar ao servidor MySQL, populando a jComboBox1 no MigratorPanel com os bancos de dados disponíveis.
+
+Interação do Usuário (MigratorPanel):
+
+O usuário seleciona um banco de dados na jComboBox1 (ação visual).
+
+O usuário clica em "Carregar Arquivo" (jButton3) para selecionar um arquivo .sql ou .rar.
+
+Se for .rar, a aplicação extrai os .sql e permite que o usuário escolha um. O conteúdo é então carregado no jTextArea1 e um File temporário é criado.
+
+Se for .sql, o conteúdo é carregado diretamente no jTextArea1.
+
+O usuário clica em "Executar Script SQL" (jButton2).
+
+Execução da Migração (MigratorPanel -> DatabaseManager):
+
+Antes de executar, o MigratorPanel chama dbManager.selectDatabase() com o banco de dados escolhido na combobox. Isso garante que a sessão MySQL da aplicação esteja apontando para o banco de dados correto.
+
+A execução do script é delegada a um SwingWorker para não travar a interface.
+
+dbManager.executeSqlScript() lê o arquivo SQL, divide-o em comandos individuais, executa cada comando em uma única transação (graças a setAutoCommit(false)), e finalmente chama commit() para persistir todas as alterações.
+
+Em caso de erro, um rollback() é realizado para desfazer as alterações.
+
+Feedback e Encerramento:
+
+Mensagens de sucesso ou erro são exibidas ao usuário.
+
+Ao clicar em "Cancelar", a aplicação se desconecta do banco de dados e encerra.
+
+Este design modular permite que cada parte do sistema seja responsável por uma tarefa específica, facilitando a manutenção e o entendimento. O uso de SwingWorker é fundamental para manter a interface responsiva durante operações de longa duração com o banco de dados.
