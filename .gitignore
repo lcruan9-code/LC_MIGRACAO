@@ -1,0 +1,16 @@
+# Diretórios gerados pelo build — não versionar
+build/
+dist/
+
+# Configurações privadas do NetBeans (local de cada dev)
+nbproject/private/
+
+# Log de execução
+lc_migracao.log
+*.log
+
+# Arquivo de configuração com credenciais — NUNCA versionar
+src/rede.txt
+
+# Arquivos não relacionados ao projeto
+migracao/

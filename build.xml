@@ -70,4 +70,27 @@
     nbproject/build-impl.xml file. 
 
     -->
+
+    <!--
+        Copia Rar.exe para build/lib/ após compilação.
+        Necessário para que o Run dentro do NetBeans encontre o executável,
+        pois o código busca em {dir_do_jar_ou_classes}/../lib/Rar.exe
+    -->
+    <target name="-post-compile">
+        <mkdir dir="${build.dir}/lib"/>
+        <copy file="lc_migracao/lib/Rar.exe"
+              todir="${build.dir}/lib"
+              failonerror="false"/>
+    </target>
+
+    <!--
+        Copia Rar.exe para dist/lib/ após geração do JAR.
+        Garante que o executável vai junto com o distribuível.
+    -->
+    <target name="-post-jar">
+        <copy file="lc_migracao/lib/Rar.exe"
+              todir="${dist.dir}/lib"
+              failonerror="false"/>
+    </target>
+
 </project>

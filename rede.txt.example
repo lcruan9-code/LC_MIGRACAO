@@ -1,0 +1,10 @@
+# Copie este arquivo para src/rede.txt e preencha com os dados do seu ambiente.
+# O arquivo src/rede.txt nunca deve ser enviado ao repositório (está no .gitignore).
+
+IP:127.0.0.1
+PORT:3306
+USER:seu_usuario
+KEY:sua_senha
+DB:nome_do_banco
+TERMINAL_TIPO:SRV
+ID_EMPRESA_PADRAO:1

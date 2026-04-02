@@ -1,77 +1,148 @@
 package view;
 
-import java.awt.Cursor;
+import com.formdev.flatlaf.FlatLightLaf;
+import config.AppConfig;
 import model.DatabaseManager;
+import model.migration.MigrationEngine;
+import model.migration.MigrationReport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.swing.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.ArrayList; 
-import javax.swing.filechooser.FileNameExtensionFilter; 
-import java.io.InputStreamReader; 
-import java.nio.file.Files; 
-import java.net.URISyntaxException; 
 
-public class MigratorPanel extends javax.swing.JPanel {
+/**
+ * MigratorPanel — JFrame único com tela + lógica de migração.
+ * Substitui MainAppFrame + MigratorPanel antigos.
+ *
+ * ── CORES (edite aqui para mudar o visual) ──────────────────────────────────
+ *   COR_PRIMARIA = #5C2380 (roxo LC Sistemas)
+ * ── ATALHOS DO DESIGN TAB ────────────────────────────────────────────────────
+ *   jPanelHeader = faixa roxa do topo (arrastável)
+ *   jComboBox1   = seletor de banco destino
+ *   jTextFieldFilePath = caminho do arquivo carregado
+ *   jButton3     = Carregar Arquivo
+ *   jButton2     = Executar Migração (primário)
+ *   jButton1     = Sair
+ *   jTextArea1   = log de execução
+ */
+public class MigratorPanel extends JFrame {
 
-    // --- Suas variáveis de dependência ---
+    private static final Logger log = LoggerFactory.getLogger(MigratorPanel.class);
+
+    // ── Dependências ─────────────────────────────────────────────────────────
+    private AppConfig       appConfig;
     private DatabaseManager dbManager;
-    private MainAppFrame parentFrame;
-    private File loadedSqlFile; // Variável para armazenar o arquivo SQL carregado
-    private File currentTempRarDir; // Variável para armazenar o diretório temporário do RAR atual
+    private File            loadedSqlFile;
+    private File            currentTempRarDir;
 
-    /**
-     * Creates new form MigratorPanel
-     */
+    // ── Arrastar janela (undecorated) ─────────────────────────────────────────
+    private int mouseX, mouseY;
+
+    // ── Entrada da aplicação ──────────────────────────────────────────────────
+    public static void main(String[] args) {
+        aplicarTema();
+        EventQueue.invokeLater(() -> new MigratorPanel().setVisible(true));
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Construtor
+    // ────────────────────────────────────────────────────────────────────────
     public MigratorPanel() {
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        setResizable(false);
+        setUndecorated(true);
+
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent e) { sairMigracao(); }
+        });
+
         initComponents();
+        setLocationRelativeTo(null);
+
+        // Arrastar pela faixa do header
+        addDragListeners(jPanelHeader);
+        addDragListeners(jLabel1);
+
+        // Inicializa banco
+        appConfig = new AppConfig();
+        dbManager = new DatabaseManager(appConfig);
+        inicializarConexao();
     }
 
-    /**
-     * Construtor preferido para uso programático, injetando dependências.
-     * @param dbManager O gerenciador de banco de dados.
-     * @param parentFrame A MainAppFrame pai para callbacks e mensagens.
-     */
-    public MigratorPanel(DatabaseManager dbManager, MainAppFrame parentFrame) {
-        this(); // Chama o construtor padrão para que initComponents() seja executado
-        this.dbManager = dbManager;
-        this.parentFrame = parentFrame;
-        this.loadedSqlFile = null; // Inicializa a variável do arquivo carregado
-        this.currentTempRarDir = null; // Inicializa a variável do diretório temporário
-    }
-
+    // ────────────────────────────────────────────────────────────────────────
+    // initComponents — gerado/gerenciado pelo NetBeans Design tab
+    // ────────────────────────────────────────────────────────────────────────
     @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
+        jPanelHeader = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
+        jLabelFilePath1 = new javax.swing.JLabel();
         jComboBox1 = new javax.swing.JComboBox();
+        jLabelFilePath = new javax.swing.JLabel();
+        jTextFieldFilePath = new javax.swing.JTextField();
+        jButton3 = new javax.swing.JButton();
         jScrollPane1 = new javax.swing.JScrollPane();
         jTextArea1 = new javax.swing.JTextArea();
         jButton1 = new javax.swing.JButton();
         jButton2 = new javax.swing.JButton();
-        jButton3 = new javax.swing.JButton();
-        jLabelFilePath = new javax.swing.JLabel();
-        jTextFieldFilePath = new javax.swing.JTextField();
-        jLabelFilePath1 = new javax.swing.JLabel();
 
-        jComboBox1.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "Item 1", "Item 2", "Item 3", "Item 4" }));
-        jComboBox1.addActionListener(new java.awt.event.ActionListener() {
+        setMaximumSize(new java.awt.Dimension(767, 319));
+        setSize(new java.awt.Dimension(767, 319));
+
+        jPanelHeader.setBackground(new java.awt.Color(92, 35, 128));
+
+        jLabel1.setFont(new java.awt.Font("Segoe UI", 1, 24)); // NOI18N
+        jLabel1.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel1.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        jLabel1.setText("LC Sistemas — Migração de Dados");
+
+        javax.swing.GroupLayout jPanelHeaderLayout = new javax.swing.GroupLayout(jPanelHeader);
+        jPanelHeader.setLayout(jPanelHeaderLayout);
+        jPanelHeaderLayout.setHorizontalGroup(
+            jPanelHeaderLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jLabel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+        );
+        jPanelHeaderLayout.setVerticalGroup(
+            jPanelHeaderLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jLabel1, javax.swing.GroupLayout.DEFAULT_SIZE, 44, Short.MAX_VALUE)
+        );
+
+        jLabelFilePath1.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
+        jLabelFilePath1.setText("Banco destino:");
+
+        jComboBox1.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "SELECIONE" }));
+
+        jLabelFilePath.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
+        jLabelFilePath.setText("Arquivo SQL:");
+
+        jTextFieldFilePath.setEditable(false);
+
+        jButton3.setBackground(new java.awt.Color(92, 35, 128));
+        jButton3.setForeground(new java.awt.Color(255, 255, 255));
+        jButton3.setText("Carregar  SQL");
+        jButton3.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jComboBox1ActionPerformed(evt);
+                jButton3ActionPerformed(evt);
             }
         });
 
+        jTextArea1.setEditable(false);
         jTextArea1.setColumns(20);
         jTextArea1.setRows(5);
         jScrollPane1.setViewportView(jTextArea1);
 
-        jButton1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/imagens/door_in.png"))); // NOI18N
         jButton1.setText("Sair");
         jButton1.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -79,468 +150,342 @@ public class MigratorPanel extends javax.swing.JPanel {
             }
         });
 
-        jButton2.setIcon(new javax.swing.ImageIcon(getClass().getResource("/imagens/tick.png"))); // NOI18N
-        jButton2.setText("Executar Migração");
+        jButton2.setBackground(new java.awt.Color(92, 35, 128));
+        jButton2.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
+        jButton2.setForeground(new java.awt.Color(255, 255, 255));
+        jButton2.setText("Executar");
         jButton2.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jButton2ActionPerformed(evt);
             }
         });
 
-        jButton3.setIcon(new javax.swing.ImageIcon(getClass().getResource("/imagens/folder_magnify.png"))); // NOI18N
-        jButton3.setText("Carregar Migração");
-        jButton3.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jButton3ActionPerformed(evt);
-            }
-        });
-
-        jLabelFilePath.setText("Local:");
-
-        jTextFieldFilePath.setEditable(false);
-        jTextFieldFilePath.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jTextFieldFilePathActionPerformed(evt);
-            }
-        });
-
-        jLabelFilePath1.setText("Banco:");
-
-        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
-        this.setLayout(layout);
+        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
+        getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jPanelHeader, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(layout.createSequentialGroup()
-                        .addComponent(jLabel1)
-                        .addGap(10, 10, 10)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jLabelFilePath, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jLabelFilePath1, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addComponent(jLabelFilePath1, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jComboBox1, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jTextFieldFilePath, javax.swing.GroupLayout.DEFAULT_SIZE, 301, Short.MAX_VALUE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 161, javax.swing.GroupLayout.PREFERRED_SIZE))))
+                        .addComponent(jComboBox1, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                    .addGroup(layout.createSequentialGroup()
+                        .addComponent(jLabelFilePath, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(jTextFieldFilePath, javax.swing.GroupLayout.DEFAULT_SIZE, 522, Short.MAX_VALUE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING)
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
                         .addGap(0, 0, Short.MAX_VALUE)
-                        .addComponent(jButton2)
+                        .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 71, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING))
-                .addContainerGap())
+                        .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                .addGap(12, 12, 12))
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createSequentialGroup()
-                        .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addComponent(jLabel1)
-                        .addGap(63, 63, 63))
-                    .addGroup(layout.createSequentialGroup()
-                        .addContainerGap()
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(jComboBox1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jLabelFilePath1))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(jLabelFilePath)
-                            .addComponent(jTextFieldFilePath, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 26, javax.swing.GroupLayout.PREFERRED_SIZE))))
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 1, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(jPanelHeader, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jButton1)
-                    .addComponent(jButton2))
-                .addGap(18, 18, 18))
+                    .addComponent(jLabelFilePath1, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jComboBox1, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jLabelFilePath, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jTextFieldFilePath, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 134, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGap(12, 12, 12))
         );
     }// </editor-fold>//GEN-END:initComponents
 
+    // ────────────────────────────────────────────────────────────────────────
+    // Event handlers (GEN-FIRST / GEN-LAST)
+    // ────────────────────────────────────────────────────────────────────────
+
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
-    sairMigracao();
+        sairMigracao();
     }//GEN-LAST:event_jButton1ActionPerformed
 
-    private void jTextFieldFilePathActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextFieldFilePathActionPerformed
-        jTextFieldFilePath.setEditable(false);       
-    }//GEN-LAST:event_jTextFieldFilePathActionPerformed
-
-    private void jComboBox1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jComboBox1ActionPerformed
-
-    }//GEN-LAST:event_jComboBox1ActionPerformed
-
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
-    executarMigracao();
+        executarMigracao();
     }//GEN-LAST:event_jButton2ActionPerformed
 
     private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
-     carregarArquivo();
+        carregarArquivo();
     }//GEN-LAST:event_jButton3ActionPerformed
 
-        private void carregarArquivo() {                                      
-                try {
-        cleanPreviousTempRarDir(); // LIMPA O DIRETÓRIO TEMPORÁRIO ANTES DE QUALQUER NOVA SELEÇÃO        
-                    } catch (Exception e) {        
-                JOptionPane.showMessageDialog(
-                    this, // Ou MigratorPanel.this se estiver em um contexto interno
-                    "Não foi possível limpar o diretório temporário. Por favor, feche quaisquer arquivos abertos nele ou reinicie o programa.\nDetalhes: " + e.getMessage(),
-                    "Erro Crítico de Limpeza",
-                    JOptionPane.ERROR_MESSAGE );
-                    } 
-                
-                JFileChooser fileChooser = new JFileChooser();
-                fileChooser.setDialogTitle("Selecionar Arquivo SQL ou RAR");
-                
-                FileNameExtensionFilter sqlFilter = new FileNameExtensionFilter("Arquivos SQL (*.sql)", "sql");
-                FileNameExtensionFilter rarFilter = new FileNameExtensionFilter("Arquivos RAR (*.rar)", "rar");
-                
-                fileChooser.addChoosableFileFilter(sqlFilter);
-                fileChooser.addChoosableFileFilter(rarFilter);
-                fileChooser.setAcceptAllFileFilterUsed(true); 
-                fileChooser.setFileFilter(fileChooser.getAcceptAllFileFilter()); 
-                
-                int userSelection = fileChooser.showOpenDialog(MigratorPanel.this);
+    // ────────────────────────────────────────────────────────────────────────
+    // Inicialização do banco
+    // ────────────────────────────────────────────────────────────────────────
 
-                if (userSelection == JFileChooser.APPROVE_OPTION) {
-                    File fileToLoad = fileChooser.getSelectedFile();
-                    String filePath = fileToLoad.getAbsolutePath();
-                    jTextFieldFilePath.setText(filePath); 
-
-                    if (filePath.toLowerCase().endsWith(".rar")) {
-                        handleRarFileSelection(fileToLoad); 
-                    } else if (filePath.toLowerCase().endsWith(".sql")) {
-                        loadSqlFileToTextArea(fileToLoad); 
-                    } else {
-                        JOptionPane.showMessageDialog(MigratorPanel.this, "Tipo de arquivo não suportado. Por favor, selecione um arquivo .sql ou .rar.", "Erro de Arquivo", JOptionPane.WARNING_MESSAGE);
-                        loadedSqlFile = null; 
-                        jTextFieldFilePath.setText(""); 
-                        return; 
-                    }
-
-                    if (loadedSqlFile == null) {
-                        jTextFieldFilePath.setText("");
-                    }
-                } else { 
-                    loadedSqlFile = null; 
-                    jTextFieldFilePath.setText(""); 
-                }
-            }
-
-
-        private void selecionarBanco(String selectedDb) {
-            
-                if (selectedDb != null && !selectedDb.isEmpty() && !selectedDb.equals("SELECIONE")) {
-                    System.out.println("Banco de dados selecionado visualmente: " + selectedDb);
-                } else if (selectedDb != null && selectedDb.equals("SELECIONE")) {
-                    System.out.println("Opção 'SELECIONE' escolhida no combobox.");
-                }
-            }
-
-        
-        private void executarMigracao(){
-
-               if (loadedSqlFile == null) {
-                    JOptionPane.showMessageDialog(MigratorPanel.this, "Por favor, carregue um script SQL antes de executar. Use o botão 'Carregar Arquivo'.", "Aviso", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-
-                String selectedDbInComboBox = (String) jComboBox1.getSelectedItem();
-                if (selectedDbInComboBox == null || selectedDbInComboBox.isEmpty() || selectedDbInComboBox.equals("SELECIONE")) {
-                    JOptionPane.showMessageDialog(MigratorPanel.this, "Por favor, selecione um banco de dados de destino válido.", "Aviso", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-                
-                final String finalCurrentDb;
-                try {
-                    dbManager.selectDatabase(selectedDbInComboBox);
-                    finalCurrentDb = selectedDbInComboBox;
-                } catch (SQLException ex) {
-                    JOptionPane.showMessageDialog(MigratorPanel.this, "Erro ao tentar selecionar o banco de dados '" + selectedDbInComboBox + "': " + ex.getMessage(), "Erro de Seleção de DB", JOptionPane.ERROR_MESSAGE);
-                    ex.printStackTrace();
-                    return;
-                }
-                
-                final MigratorPanel panelRef = MigratorPanel.this;
-
-                jButton2.setEnabled(false);
-                jButton1.setEnabled(false); 
-                jButton3.setEnabled(false); 
-                jComboBox1.setEnabled(false); 
-                setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-                
-                
-
-                SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
-                    @Override
-                    protected Void doInBackground() throws Exception {
-                        try { 
-                            dbManager.executeSqlScript(loadedSqlFile, finalCurrentDb); 
-                            JOptionPane.showMessageDialog(panelRef, "Script SQL executado com sucesso no DB: " + finalCurrentDb, "Sucesso", JOptionPane.INFORMATION_MESSAGE); 
-                        } catch (SQLException ex) {
-                            JOptionPane.showMessageDialog(panelRef, "Erro ao executar o script SQL: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE); 
-                            ex.printStackTrace();
-                            if (ex.getMessage() != null && ex.getMessage().contains("Data too long for column")) {
-                                JOptionPane.showMessageDialog(panelRef, 
-                                    "Atenção: Um ou mais valores são muito longos para as colunas do banco de dados. " + 
-                                    "Considere aumentar o tamanho das colunas afetadas (ex: email_site) usando ALTER TABLE.", 
-                                    "Sugestão de Correção", JOptionPane.INFORMATION_MESSAGE);
-                            }
-                        } catch (IOException ex) { 
-                            JOptionPane.showMessageDialog(panelRef, "Erro ao ler o arquivo SQL: " + ex.getMessage(), "Erro de Arquivo", JOptionPane.ERROR_MESSAGE); 
-                            ex.printStackTrace();
-                        }
-                        return null;
-                    }
-
-                    @Override
-                    protected void done() {
-                        jButton2.setEnabled(true);
-                        jButton1.setEnabled(true);
-                        jButton3.setEnabled(true); 
-                        jComboBox1.setEnabled(true); 
-                        setCursor(Cursor.getDefaultCursor());
-                    }
-                };
-                worker.execute();} 
-
-
-        private void sairMigracao(){
-        int confirm = JOptionPane.showConfirmDialog(parentFrame, "Deseja realmente sair?", "Confirmar Saída", JOptionPane.YES_NO_OPTION);
-                if (confirm == JOptionPane.YES_OPTION) {
-                    cleanPreviousTempRarDir(); // Limpa o diretório temporário ao sair
-                    parentFrame.dispose(); 
-                    if (dbManager != null) {
-                        dbManager.disconnect(); 
-                    }
-                    System.exit(0); 
-                }            
-        };
-
-   
-    public void populateDatabaseComboBox(List<String> databases) {
-        jComboBox1.removeAllItems(); 
-        jComboBox1.addItem("SELECIONE"); 
-
-        if (databases != null) {
-            for (String db : databases) {
-                jComboBox1.addItem(db);
-            }
+    private void inicializarConexao() {
+        try {
+            dbManager.connect();
+            populateDatabaseComboBox(dbManager.getAllDatabases());
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this,
+                "Erro ao conectar: " + e.getMessage() +
+                "\nVerifique as configurações em 'rede.txt'.",
+                "Erro de Conexão", JOptionPane.ERROR_MESSAGE);
         }
     }
 
+    public void populateDatabaseComboBox(List<String> databases) {
+        jComboBox1.removeAllItems();
+        jComboBox1.addItem("SELECIONE");
+        if (databases != null) for (String db : databases) jComboBox1.addItem(db);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Arrastar janela sem barra de título
+    // ────────────────────────────────────────────────────────────────────────
+
+    private void addDragListeners(JComponent c) {
+        c.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) {
+                mouseX = e.getX(); mouseY = e.getY();
+            }
+        });
+        c.addMouseMotionListener(new MouseAdapter() {
+            @Override public void mouseDragged(MouseEvent e) {
+                setLocation(e.getXOnScreen() - mouseX, e.getYOnScreen() - mouseY);
+            }
+        });
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Migração
+    // ────────────────────────────────────────────────────────────────────────
+
+    private void executarMigracao() {
+        if (loadedSqlFile == null) {
+            JOptionPane.showMessageDialog(this, "Carregue um arquivo SQL antes de executar.", "Aviso", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        String selectedDb = (String) jComboBox1.getSelectedItem();
+        if (selectedDb == null || selectedDb.equals("SELECIONE")) {
+            JOptionPane.showMessageDialog(this, "Selecione um banco de destino.", "Aviso", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        final String finalDb   = selectedDb;
+        final File   finalFile = loadedSqlFile;
+        final MigratorPanel self = this;
+
+        setControlesHabilitados(false);
+        jTextArea1.setText("[MIGRAÇÃO] Iniciando merge seguro...\n");
+
+        SwingWorker<MigrationReport, String> worker = new SwingWorker<MigrationReport, String>() {
+            @Override protected MigrationReport doInBackground() throws Exception {
+                Connection conn = dbManager.getConnection();
+                MigrationEngine engine = new MigrationEngine(conn, finalDb, finalFile, msg -> publish(msg));
+                engine.configurar(true, true, true, true, true, true, true);
+                return engine.executar();
+            }
+            @Override protected void process(List<String> chunks) {
+                for (String msg : chunks) {
+                    jTextArea1.append(msg + "\n");
+                    jTextArea1.setCaretPosition(jTextArea1.getDocument().getLength());
+                }
+            }
+            @Override protected void done() {
+                setControlesHabilitados(true);
+                try {
+                    MigrationReport report = get();
+                    jTextArea1.append("\n" + report.toTexto());
+                    jTextArea1.setCaretPosition(jTextArea1.getDocument().getLength());
+                    if (report.isSucesso()) {
+                        JOptionPane.showMessageDialog(self, "Migração concluída com sucesso!\nVeja o log para detalhes.", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(self, "Migração com erros. Verifique o log.", "Atenção", JOptionPane.WARNING_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    jTextArea1.append("\n[ERRO FATAL] " + ex.getMessage() + "\n");
+                    JOptionPane.showMessageDialog(self, "Erro: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void setControlesHabilitados(boolean on) {
+        jButton1.setEnabled(on); jButton2.setEnabled(on);
+        jButton3.setEnabled(on); jComboBox1.setEnabled(on);
+        setCursor(on ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Carregar arquivo SQL / RAR
+    // ────────────────────────────────────────────────────────────────────────
+
+    private void carregarArquivo() {
+        try { cleanPreviousTempRarDir(); } catch (Exception e) { /* ignora */ }
+
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Selecionar Arquivo SQL ou RAR");
+
+        // Abre direto na pasta Downloads do Windows
+        File downloads = new File(System.getProperty("user.home"), "Downloads");
+        if (downloads.exists()) fc.setCurrentDirectory(downloads);
+
+        // Filtro combinado como padrão (ambos visíveis ao mesmo tempo)
+        FileNameExtensionFilter filtroPadrao = new FileNameExtensionFilter(
+                "Arquivos SQL e RAR (*.sql, *.rar)", "sql", "rar");
+        fc.addChoosableFileFilter(filtroPadrao);
+        fc.addChoosableFileFilter(new FileNameExtensionFilter("Arquivos SQL (*.sql)", "sql"));
+        fc.addChoosableFileFilter(new FileNameExtensionFilter("Arquivos RAR (*.rar)", "rar"));
+        fc.setAcceptAllFileFilterUsed(true);
+        fc.setFileFilter(filtroPadrao); // seleciona o combinado por padrão
+
+        if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            loadedSqlFile = null; jTextFieldFilePath.setText(""); return;
+        }
+
+        File file = fc.getSelectedFile();
+        jTextFieldFilePath.setText(file.getAbsolutePath());
+        String nome = file.getName().toLowerCase();
+
+        if (nome.endsWith(".rar"))      handleRarFileSelection(file);
+        else if (nome.endsWith(".sql")) loadSqlFileToTextArea(file);
+        else {
+            JOptionPane.showMessageDialog(this, "Selecione .sql ou .rar.", "Tipo inválido", JOptionPane.WARNING_MESSAGE);
+            loadedSqlFile = null; jTextFieldFilePath.setText("");
+        }
+        if (loadedSqlFile == null) jTextFieldFilePath.setText("");
+    }
 
     private void loadSqlFileToTextArea(File sqlFile) {
-        try (BufferedReader reader = new BufferedReader(new FileReader(sqlFile))) {
+        try {
+            long kb = sqlFile.length() / 1024;
             StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
+            sb.append("Arquivo : ").append(sqlFile.getName()).append("\n");
+            sb.append("Tamanho : ").append(kb).append(" KB\n");
+            sb.append("\n--- Prévia (60 linhas) ---\n");
+            try (BufferedReader r = new BufferedReader(new FileReader(sqlFile))) {
+                String line; int n = 0;
+                while ((line = r.readLine()) != null && n++ < 60) sb.append(line).append("\n");
             }
+            sb.append("\n[... arquivo completo processado durante a migração ...]");
             jTextArea1.setText(sb.toString());
-            loadedSqlFile = sqlFile; 
-            JOptionPane.showMessageDialog(MigratorPanel.this, "Arquivo SQL carregado: " + sqlFile.getName(), "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-        } catch (IOException ex) { // <-- Conflito resolvido aqui
-            JOptionPane.showMessageDialog(MigratorPanel.this, "Erro ao carregar o arquivo SQL: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
-            ex.printStackTrace();
-            loadedSqlFile = null;
-            jTextFieldFilePath.setText("");
+            jTextArea1.setCaretPosition(0);
+            loadedSqlFile = sqlFile;
+            JOptionPane.showMessageDialog(this, "Arquivo carregado: " + sqlFile.getName() + " (" + kb + " KB)", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao carregar: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
+            loadedSqlFile = null; jTextFieldFilePath.setText("");
         }
     }
-
 
     private void handleRarFileSelection(File rarFile) {
-        File tempDir = null; // Diretório temporário para extração
+        File tempDir = null;
         try {
-            // 1. Criar um diretório temporário para extração
-            tempDir = Files.createTempDirectory("rar_temp_").toFile(); 
-            tempDir.deleteOnExit(); // Tenta deletar ao sair da JVM (fallback)
-            this.currentTempRarDir = tempDir; // Armazena a referência para limpeza manual
+            tempDir = Files.createTempDirectory("rar_temp_").toFile();
+            tempDir.deleteOnExit();
+            this.currentTempRarDir = tempDir;
 
-            // 2. Determinar o comando 'Rar.exe' para o sistema operacional e sua localização
-            String rarExecName = "Rar.exe"; 
+            File jarLoc = new File(MigratorPanel.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            File libDir = new File(jarLoc.getParentFile(), "lib");
             String os = System.getProperty("os.name").toLowerCase();
-            
-            // Obter o diretório onde o JAR da aplicação está rodando (ex: ".../dist/")
-            File jarFileLocation = new File(MainAppFrame.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            File appRootDirectory = jarFileLocation.getParentFile(); // Isso deve ser a pasta 'dist'
+            String rarExec = os.contains("win") ? "Rar.exe" : "rar";
+            File rarExeFile = new File(libDir, rarExec);
+            String rarPath = rarExeFile.exists() ? rarExeFile.getAbsolutePath() : rarExec;
 
-            // Caminho para a pasta 'lib' dentro do diretório raiz da aplicação (dist/lib)
-            File libDir = new File(appRootDirectory, "lib"); 
-            String rarFullPath = null; 
+            ProcessBuilder pb = new ProcessBuilder(rarPath, "x", "-p-", "-o+", rarFile.getAbsolutePath(), tempDir.getAbsolutePath());
+            pb.redirectErrorStream(true); pb.directory(libDir);
+            Process proc = pb.start();
+            StringBuilder out = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+                String line; while ((line = br.readLine()) != null) out.append(line).append("\n");
+            }
+            if (proc.waitFor() != 0) {
+                JOptionPane.showMessageDialog(this, "Erro ao descompactar RAR:\n" + out.toString().substring(0, Math.min(out.length(), 300)), "Erro RAR", JOptionPane.ERROR_MESSAGE);
+                loadedSqlFile = null; jTextFieldFilePath.setText(""); return;
+            }
 
-            File rarExeFile = new File(libDir, rarExecName);
+            List<String> sqlFiles = new ArrayList<>();
+            listSqlFilesInDirectory(tempDir, sqlFiles, "");
+            if (sqlFiles.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Nenhum .sql encontrado no RAR.", "Aviso", JOptionPane.INFORMATION_MESSAGE);
+                loadedSqlFile = null; jTextFieldFilePath.setText(""); return;
+            }
 
-            if (os.contains("win") && rarExeFile.exists()) {
-                rarFullPath = rarExeFile.getAbsolutePath();
-            } else if (os.contains("win")) { 
-                rarFullPath = rarExecName; 
-            } else { // macOS, Linux
-                rarExecName = "rar"; 
-                File rarFileLinuxMac = new File(libDir, rarExecName);
-                if (rarFileLinuxMac.exists()) {
-                    rarFullPath = rarFileLinuxMac.getAbsolutePath();
-                } else {
-                    rarFullPath = rarExecName; 
+            JComboBox<String> combo = new JComboBox<>(sqlFiles.toArray(new String[0]));
+            JPanel sel = new JPanel(); sel.add(new JLabel("Selecione o SQL:")); sel.add(combo);
+            if (JOptionPane.showConfirmDialog(this, sel, "SQL no RAR", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                String rel = (String) combo.getSelectedItem();
+                File sql = new File(tempDir, rel.replace("\\", File.separator));
+                if (!sql.exists()) {
+                    JOptionPane.showMessageDialog(this, "Arquivo não encontrado após extração.", "Erro", JOptionPane.ERROR_MESSAGE);
+                    loadedSqlFile = null; jTextFieldFilePath.setText(""); return;
                 }
-            }
-            
-            if (rarFullPath == null) { 
-                 JOptionPane.showMessageDialog(MigratorPanel.this, 
-                    "Erro: Executável 'Rar.exe' (ou 'rar') não encontrado.\n" +
-                    "Por favor, coloque 'Rar.exe' (no Windows) ou 'rar' (no Linux/macOS) " +
-                    "dentro da pasta 'lib' na raiz da sua aplicação ou certifique-se de que está no PATH do sistema.", 
-                    "Erro de Executável Rar", JOptionPane.ERROR_MESSAGE);
-                loadedSqlFile = null;
-                jTextFieldFilePath.setText("");
-                return;
-            }
-
-            // Construir o comando para extrair o RAR
-            String[] command = {rarFullPath, "x", "-p-", "-o+", rarFile.getAbsolutePath(), tempDir.getAbsolutePath()};
-            
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true); 
-            pb.directory(libDir); 
-
-            Process process = pb.start();
-
-            // Ler a saída do processo (para depuração e feedback)
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
-
-            int exitCode = process.waitFor(); 
-            System.out.println("Comando Rar.exe executado. Saída:\n" + output.toString());
-            System.out.println("Exit Code: " + exitCode);
-
-            if (exitCode != 0) {
-                JOptionPane.showMessageDialog(MigratorPanel.this, 
-                    "Erro ao descompactar o arquivo RAR (Exit Code: " + exitCode + ").\n" +
-                    "Verifique se o executável '" + rarExecName + "' está na pasta 'lib' e se o arquivo RAR não está corrompido/protegido.\n" +
-                    "Detalhes: " + output.toString().substring(0, Math.min(output.length(), 200)) + "...", 
-                    "Erro de Descompactação RAR", JOptionPane.ERROR_MESSAGE);
-                loadedSqlFile = null;
-                jTextFieldFilePath.setText("");
-                return;
-            }
-
-            // 3. Listar arquivos SQL na pasta temporária (agora que está descompactado)
-            List<String> sqlFilesInsideRar = new ArrayList<>();
-            // CHAMA O MÉTODO RECURSIVO PARA ENCONTRAR TODOS OS .SQL DENTRO DO TEMPDIR
-            listSqlFilesInDirectory(tempDir, sqlFilesInsideRar, ""); 
-
-            if (sqlFilesInsideRar.isEmpty()) {
-                JOptionPane.showMessageDialog(MigratorPanel.this, "Nenhum arquivo .sql encontrado dentro do arquivo RAR selecionado (mesmo em subpastas ou após descompactação).", "Aviso", JOptionPane.INFORMATION_MESSAGE);
-                loadedSqlFile = null; 
-                jTextFieldFilePath.setText(""); 
-                return;
-            }
-
-            // 4. Mostrar seleção ao usuário
-            JComboBox<String> internalSqlComboBox = new JComboBox<>(sqlFilesInsideRar.toArray(new String[0]));
-            JPanel panel = new JPanel();
-            panel.add(new JLabel("Selecione o arquivo SQL dentro do RAR:"));
-            panel.add(internalSqlComboBox);
-
-            int result = JOptionPane.showConfirmDialog(MigratorPanel.this, panel, "Selecionar SQL do RAR", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-
-            if (result == JOptionPane.OK_OPTION) {
-                String selectedSqlRelativePath = (String) internalSqlComboBox.getSelectedItem(); // Caminho relativo (ex: "pasta/arquivo.sql")
-                if (selectedSqlRelativePath != null) {
-                    // CONSTRÓI O CAMINHO ABSOLUTO CORRETO PARA O ARQUIVO EXTRAÍDO
-                    // Este é o ponto chave: a forma como o File é construído
-                    File extractedSqlFile = new File(tempDir, selectedSqlRelativePath.replace("\\", File.separator)); // Garante separadores corretos
-                    
-                    if (!extractedSqlFile.exists() || extractedSqlFile.isDirectory()) { // Adiciona verificação de existência
-                        JOptionPane.showMessageDialog(MigratorPanel.this, 
-                                "Erro: O arquivo SQL selecionado não foi encontrado ou não é um arquivo válido no diretório temporário após a extração.",
-                                "Erro de Arquivo", JOptionPane.ERROR_MESSAGE);
-                        loadedSqlFile = null;
-                        jTextFieldFilePath.setText("");
-                        return;
-                    }
-
-                    loadSqlFileToTextArea(extractedSqlFile); 
-
-                    jTextFieldFilePath.setText(rarFile.getAbsolutePath() + " -> " + selectedSqlRelativePath);
-
-                    JOptionPane.showMessageDialog(MigratorPanel.this, "Arquivo '" + selectedSqlRelativePath + "' do RAR carregado com sucesso.", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-                } else {
-                    loadedSqlFile = null;
-                    jTextFieldFilePath.setText("");
-                }
-            } else {
-                jTextFieldFilePath.setText("");
-                loadedSqlFile = null; 
-            }
-
-        } catch (IOException | InterruptedException | URISyntaxException ex) { 
-            JOptionPane.showMessageDialog(MigratorPanel.this, "Erro inesperado ao descompactar ou processar o RAR: " + ex.getMessage(), "Erro de Operação RAR", JOptionPane.ERROR_MESSAGE);
-            ex.printStackTrace();
-            loadedSqlFile = null;
-            jTextFieldFilePath.setText("");
-        } finally {
-            // A limpeza agora é feita por cleanPreviousTempRarDir()
-            // deleteDirectory(tempDir); // REMOVIDO: Não deleta aqui para evitar exclusão prematura
+                loadSqlFileToTextArea(sql);
+                jTextFieldFilePath.setText(rarFile.getAbsolutePath() + " → " + rel);
+            } else { loadedSqlFile = null; jTextFieldFilePath.setText(""); }
+        } catch (IOException | InterruptedException | URISyntaxException ex) {
+            JOptionPane.showMessageDialog(this, "Erro RAR: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
+            loadedSqlFile = null; jTextFieldFilePath.setText("");
         }
     }
 
-    /**
-     * Lista recursivamente arquivos .sql dentro de um diretório.
-     * @param directory O diretório para escanear.
-     * @param sqlFilesList A lista para adicionar os caminhos relativos dos arquivos SQL.
-     * @param parentPath O caminho pai relativo para os arquivos.
-     */
-    private void listSqlFilesInDirectory(File directory, List<String> sqlFilesList, String parentPath) {
-        File[] files = directory.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    listSqlFilesInDirectory(file, sqlFilesList, parentPath + file.getName() + File.separator);
-                } else if (file.getName().toLowerCase().endsWith(".sql")) {
-                    sqlFilesList.add(parentPath + file.getName());
-                }
-            }
+    private void listSqlFilesInDirectory(File dir, List<String> lista, String pai) {
+        File[] files = dir.listFiles();
+        if (files != null) for (File f : files) {
+            if (f.isDirectory()) listSqlFilesInDirectory(f, lista, pai + f.getName() + File.separator);
+            else if (f.getName().toLowerCase().endsWith(".sql")) lista.add(pai + f.getName());
         }
     }
 
-    /**
-     * Deleta um diretório e todo o seu conteúdo recursivamente.
-     * Usado para limpar diretórios temporários.
-     * @param directory O diretório a ser deletado.
-     */
-    private void deleteDirectory(File directory) {
-        if (directory == null || !directory.exists()) {
-            return; // Nada para deletar
+    // ────────────────────────────────────────────────────────────────────────
+    // Sair / utilitários
+    // ────────────────────────────────────────────────────────────────────────
+
+    private void sairMigracao() {
+        if (JOptionPane.showConfirmDialog(this, "Deseja realmente sair?", "Confirmar Saída", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+            cleanPreviousTempRarDir();
+            if (dbManager != null) dbManager.disconnect();
+            dispose();
+            System.exit(0);
         }
-        if (directory.isDirectory()) {
-            File[] files = directory.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    deleteDirectory(file);
-                }
-            }
-        }
-        directory.delete();
     }
-    
-    /**
-     * Limpa o diretório temporário do RAR da operação anterior, se existir.
-     */
+
     private void cleanPreviousTempRarDir() {
-        if (this.currentTempRarDir != null && this.currentTempRarDir.exists()) {
-            System.out.println("Limpando diretório temporário anterior: " + this.currentTempRarDir.getAbsolutePath());
-            deleteDirectory(this.currentTempRarDir);
-        }
-        this.currentTempRarDir = null;
+        if (currentTempRarDir != null && currentTempRarDir.exists()) deleteDirectory(currentTempRarDir);
+        currentTempRarDir = null;
+    }
+
+    private void deleteDirectory(File dir) {
+        if (dir == null || !dir.exists()) return;
+        if (dir.isDirectory()) { File[] f = dir.listFiles(); if (f != null) for (File x : f) deleteDirectory(x); }
+        dir.delete();
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Tema FlatLaf — LC Sistemas
+    // ────────────────────────────────────────────────────────────────────────
+
+    public static void aplicarTema() {
+        try {
+            FlatLightLaf.setup();
+            UIManager.put("Component.arc", 6);
+            UIManager.put("Button.arc", 8);
+            UIManager.put("TextComponent.arc", 6);
+            UIManager.put("ComboBox.arc", 6);
+            UIManager.put("Component.focusColor", new Color(0x5C2380));
+            UIManager.put("TabbedPane.selectedBackground", new Color(0x5C2380));
+            UIManager.put("TabbedPane.selectedForeground", Color.WHITE);
+            UIManager.put("ScrollBar.thumbColor", new Color(0xC0B0D8));
+        } catch (Exception ex) { log.warn("Falha ao aplicar tema FlatLaf", ex); }
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
@@ -551,6 +496,7 @@ public class MigratorPanel extends javax.swing.JPanel {
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabelFilePath;
     private javax.swing.JLabel jLabelFilePath1;
+    private javax.swing.JPanel jPanelHeader;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JTextArea jTextArea1;
     private javax.swing.JTextField jTextFieldFilePath;

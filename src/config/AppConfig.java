@@ -1,17 +1,39 @@
 package config;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Properties; 
+import java.net.URISyntaxException;
+import java.util.Properties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class AppConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(AppConfig.class);
+
     private Properties props;
-    private static final String CONFIG_FILE = "rede.txt"; 
+    private static final String CONFIG_FILE = "rede.txt";
 
     public AppConfig() {
         props = new Properties();
         loadConfig();
+    }
+
+    /**
+     * Localiza o rede.txt no mesmo diretório do .jar em execução.
+     * Fallback para o diretório corrente se não for possível determinar o jar.
+     */
+    private File getConfigFile() {
+        try {
+            File jarFile = new File(AppConfig.class.getProtectionDomain()
+                    .getCodeSource().getLocation().toURI());
+            return new File(jarFile.getParentFile(), CONFIG_FILE);
+        } catch (URISyntaxException e) {
+            log.warn("Não foi possível determinar o diretório do .jar, usando diretório corrente.");
+            return new File(CONFIG_FILE);
+        }
     }
 
     private void loadConfig() {
@@ -23,28 +45,27 @@ public class AppConfig {
         props.setProperty("TERMINAL_TIPO", "");
         props.setProperty("ID_EMPRESA_PADRAO", "");
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(CONFIG_FILE))) {
+        File configFile = getConfigFile();
+        try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
-                if (line.isEmpty() || line.startsWith("#")) { 
+                if (line.isEmpty() || line.startsWith("#")) {
                     continue;
                 }
-                
-                String[] parts = line.split(":", 2); // Divide em no máximo 2 partes no primeiro ':'
+
+                String[] parts = line.split(":", 2);
                 if (parts.length == 2) {
                     String key = parts[0].trim();
                     String value = parts[1].trim();
-                    props.setProperty(key, value); // Armazena a chave e o valor como estão no arquivo
+                    props.setProperty(key, value);
                 } else {
-                    System.err.println("Linha inválida no rede.txt (formato esperado KEY:VALOR): " + line);
+                    log.warn("Linha inválida no rede.txt (formato esperado KEY:VALOR): {}", line);
                 }
             }
-            System.out.println("Configurações carregadas com sucesso de " + CONFIG_FILE);
+            log.info("Configurações carregadas de {}", configFile.getAbsolutePath());
         } catch (IOException e) {
-            System.err.println("Erro ao carregar o arquivo de configuração '" + CONFIG_FILE + "': " + e.getMessage());
-            System.err.println("Certifique-se de que o arquivo 'rede.txt' está na raiz do projeto (ou no diretório de execução).");
-            
+            log.error("Erro ao carregar '{}': {}", configFile.getAbsolutePath(), e.getMessage());
         }
     }
 

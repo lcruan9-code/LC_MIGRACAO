@@ -1,6 +1,8 @@
 package model;
 
 import config.AppConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.sql.*;
@@ -12,6 +14,8 @@ import java.util.List;
  * e executar scripts SQL em um banco MySQL.
  */
 public class DatabaseManager {
+
+    private static final Logger log = LoggerFactory.getLogger(DatabaseManager.class);
 
     private AppConfig appConfig;
     private Connection connection;
@@ -27,10 +31,10 @@ public class DatabaseManager {
      */
     private void loadJdbcDriver() {
         try {
-            Class.forName("com.mysql.jdbc.Driver"); 
-            System.out.println("Driver JDBC carregado com sucesso.");
+            Class.forName("com.mysql.jdbc.Driver");
+            log.info("Driver JDBC carregado com sucesso.");
         } catch (ClassNotFoundException e) {
-            System.err.println("Erro ao carregar o driver JDBC. Verifique se o mysql-connector está no classpath.");
+            log.error("Erro ao carregar o driver JDBC. Verifique se o mysql-connector está no classpath.");
             throw new RuntimeException(e);
         }
     }
@@ -46,7 +50,7 @@ public class DatabaseManager {
                 appConfig.getDbUser(),
                 appConfig.getDbPassword()
         );
-        System.out.println("Conectado ao servidor MySQL com sucesso.");
+        log.info("Conectado ao servidor MySQL com sucesso.");
     }
 
     /**
@@ -56,10 +60,10 @@ public class DatabaseManager {
         try {
             if (connection != null && !connection.isClosed()) {
                 connection.close();
-                System.out.println("Conexão encerrada.");
+                log.info("Conexão encerrada.");
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            log.error("Erro ao encerrar conexão com o banco de dados.", e);
         }
     }
 
@@ -72,12 +76,23 @@ public class DatabaseManager {
         try (Statement stmt = connection.createStatement()) {
             stmt.execute("USE `" + dbName + "`");
             currentDatabase = dbName;
-            System.out.println("Banco selecionado: " + dbName);
+            log.info("Banco selecionado: {}", dbName);
         }
     }
 
     public String getCurrentDatabase() {
         return currentDatabase;
+    }
+
+    /**
+     * Expõe a conexão JDBC bruta para uso pelo MigrationEngine.
+     * Garante que a conexão está ativa antes de retornar.
+     */
+    public Connection getConnection() throws SQLException {
+        if (connection == null || connection.isClosed()) {
+            connect();
+        }
+        return connection;
     }
 
     /**
@@ -133,7 +148,7 @@ public class DatabaseManager {
                     String command = sqlCommand.toString().trim();
                     if (command.endsWith(";")) command = command.substring(0, command.length() - 1);
                     if (!command.isEmpty()) {
-                        System.out.println("Executando linha " + lineNumber + ": " + command);
+                        log.debug("Executando linha {}: {}", lineNumber, command);
                         stmt.execute(command);
                     }
                     sqlCommand.setLength(0); // Reset comando
@@ -141,9 +156,9 @@ public class DatabaseManager {
             }
 
             connection.commit();
-            System.out.println("Script executado com sucesso e commit realizado.");
+            log.info("Script executado com sucesso e commit realizado.");
         } catch (SQLException | IOException e) {
-            System.err.println("Erro ao executar script. Realizando rollback.");
+            log.error("Erro ao executar script. Realizando rollback.", e);
             connection.rollback();
             throw e;
         } finally {
@@ -159,13 +174,13 @@ public class DatabaseManager {
             stmt.execute("USE `" + dbName + "`");
             ResultSet rs = stmt.executeQuery("SHOW TABLES");
 
-            System.out.println("Tabelas no banco " + dbName + ":");
+            log.info("Tabelas no banco {}:", dbName);
             while (rs.next()) {
-                System.out.println(" - " + rs.getString(1));
+                log.info("  - {}", rs.getString(1));
             }
 
         } catch (SQLException e) {
-            System.err.println("Erro ao listar tabelas: " + e.getMessage());
+            log.error("Erro ao listar tabelas: {}", e.getMessage());
         }
     }
 }
