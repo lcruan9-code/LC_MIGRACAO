@@ -9,8 +9,10 @@ nbproject/private/
 lc_migracao.log
 *.log
 
-# Arquivo de configuração com credenciais — NUNCA versionar
+# Arquivos de configuração com credenciais — NUNCA versionar
 src/rede.txt
+rede.txt
+nbproject/rede.txt
 
 # Arquivos não relacionados ao projeto
 migracao/
