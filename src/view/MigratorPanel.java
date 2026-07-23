@@ -5,6 +5,8 @@ import config.AppConfig;
 import model.DatabaseManager;
 import model.migration.MigrationEngine;
 import model.migration.MigrationReport;
+import model.migration.SchemaBackup;
+import Util.ThemeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,7 +19,9 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -48,6 +52,7 @@ public class MigratorPanel extends JFrame {
     // ── Arrastar janela (undecorated) ─────────────────────────────────────────
     private int mouseX, mouseY;
 
+
     // ── Entrada da aplicação ──────────────────────────────────────────────────
     public static void main(String[] args) {
         aplicarTema();
@@ -60,23 +65,52 @@ public class MigratorPanel extends JFrame {
     public MigratorPanel() {
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setResizable(false);
-        setUndecorated(true);
+        setTitle("Migração de Dados");
+        setUndecorated(true); // modelo sem barra: título fonte 17 + separador fazem o papel de cabeçalho
 
         addWindowListener(new WindowAdapter() {
             @Override public void windowClosing(WindowEvent e) { sairMigracao(); }
         });
 
         initComponents();
+        setUX();
         setLocationRelativeTo(null);
 
-        // Arrastar pela faixa do header
-        addDragListeners(jPanelHeader);
-        addDragListeners(jLabel1);
+        // Sem barra de título: arrastar pela área do título e espaços vazios
+        addDragListeners(jLabel2);
+        addDragListeners((JComponent) getContentPane());
 
         // Inicializa banco
         appConfig = new AppConfig();
         dbManager = new DatabaseManager(appConfig);
         inicializarConexao();
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Estilização pós-initComponents (fora do código gerado)
+    // ────────────────────────────────────────────────────────────────────────
+    private void setUX() {
+        ThemeManager.botaoPrimario(jButton2);      // botão primário (mais à direita)
+        ThemeManager.estilizarScrollPane(jScrollPane1);
+        ThemeManager.bordaJanela(getRootPane());   // borda cinza da janela sem barra
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Arrastar janela sem barra de título
+    // ────────────────────────────────────────────────────────────────────────
+    private void addDragListeners(JComponent c) {
+        c.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) {
+                // offset do clique em relação ao canto da janela (independe do componente)
+                mouseX = e.getXOnScreen() - getX();
+                mouseY = e.getYOnScreen() - getY();
+            }
+        });
+        c.addMouseMotionListener(new MouseAdapter() {
+            @Override public void mouseDragged(MouseEvent e) {
+                setLocation(e.getXOnScreen() - mouseX, e.getYOnScreen() - mouseY);
+            }
+        });
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -86,9 +120,8 @@ public class MigratorPanel extends JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        jPanelHeader = new javax.swing.JPanel();
-        jLabel1 = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
+        jSeparator1 = new javax.swing.JSeparator();
         jLabelFilePath1 = new javax.swing.JLabel();
         jComboBox1 = new javax.swing.JComboBox();
         jLabelFilePath = new javax.swing.JLabel();
@@ -99,53 +132,19 @@ public class MigratorPanel extends JFrame {
         jButton1 = new javax.swing.JButton();
         jButton2 = new javax.swing.JButton();
 
-        setMaximumSize(new java.awt.Dimension(767, 319));
-        setSize(new java.awt.Dimension(767, 319));
-
-        jPanelHeader.setBackground(new java.awt.Color(92, 35, 128));
-
-        jLabel1.setFont(new java.awt.Font("Segoe UI", 1, 24)); // NOI18N
-        jLabel1.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel1.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
-        jLabel1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/icons/lc_logoSofthouse_para_fundo_escuro2.png"))); // NOI18N
-
-        jLabel2.setFont(new java.awt.Font("Segoe UI", 1, 24)); // NOI18N
-        jLabel2.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel2.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        jLabel2.setFont(new java.awt.Font("Segoe UI", 0, 17)); // NOI18N
         jLabel2.setText("Migração de Dados");
 
-        javax.swing.GroupLayout jPanelHeaderLayout = new javax.swing.GroupLayout(jPanelHeader);
-        jPanelHeader.setLayout(jPanelHeaderLayout);
-        jPanelHeaderLayout.setHorizontalGroup(
-            jPanelHeaderLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanelHeaderLayout.createSequentialGroup()
-                .addComponent(jLabel1)
-                .addGap(121, 121, 121)
-                .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 385, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(126, Short.MAX_VALUE))
-        );
-        jPanelHeaderLayout.setVerticalGroup(
-            jPanelHeaderLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanelHeaderLayout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(jLabel2, javax.swing.GroupLayout.DEFAULT_SIZE, 56, Short.MAX_VALUE)
-                .addContainerGap())
-            .addComponent(jLabel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-        );
-
-        jLabelFilePath1.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
         jLabelFilePath1.setText("Banco destino:");
 
+        jComboBox1.setMaximumRowCount(12);
         jComboBox1.setModel(new javax.swing.DefaultComboBoxModel(new String[] { "SELECIONE" }));
 
-        jLabelFilePath.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
         jLabelFilePath.setText("Arquivo SQL:");
 
         jTextFieldFilePath.setEditable(false);
 
-        jButton3.setBackground(new java.awt.Color(92, 35, 128));
-        jButton3.setForeground(new java.awt.Color(255, 255, 255));
-        jButton3.setText("Carregar  SQL");
+        jButton3.setIcon(new javax.swing.ImageIcon(getClass().getResource("/imagens/zoom.png"))); // NOI18N
         jButton3.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jButton3ActionPerformed(evt);
@@ -164,9 +163,8 @@ public class MigratorPanel extends JFrame {
             }
         });
 
-        jButton2.setBackground(new java.awt.Color(92, 35, 128));
-        jButton2.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
-        jButton2.setForeground(new java.awt.Color(255, 255, 255));
+        jButton2.setBackground(new java.awt.Color(63, 42, 115));
+        jButton2.setForeground(new java.awt.Color(236, 239, 243));
         jButton2.setText("Executar");
         jButton2.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -178,10 +176,13 @@ public class MigratorPanel extends JFrame {
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanelHeader, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(layout.createSequentialGroup()
+                        .addComponent(jLabel2)
+                        .addGap(0, 0, Short.MAX_VALUE))
+                    .addComponent(jSeparator1)
                     .addGroup(layout.createSequentialGroup()
                         .addComponent(jLabelFilePath1, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
@@ -191,36 +192,41 @@ public class MigratorPanel extends JFrame {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(jTextFieldFilePath)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING)
+                        .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 576, Short.MAX_VALUE)
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
                         .addGap(0, 0, Short.MAX_VALUE)
                         .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                .addGap(12, 12, 12))
+                .addContainerGap())
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addComponent(jPanelHeader, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap()
+                .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 28, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jSeparator1, javax.swing.GroupLayout.PREFERRED_SIZE, 10, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabelFilePath1, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jComboBox1, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jLabelFilePath1)
+                    .addComponent(jComboBox1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabelFilePath, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jTextFieldFilePath, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jLabelFilePath)
+                    .addComponent(jTextFieldFilePath, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jButton3))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 161, Short.MAX_VALUE)
-                .addGap(18, 18, 18)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 122, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addGap(12, 12, 12))
+                .addContainerGap())
         );
+
+        pack();
     }// </editor-fold>//GEN-END:initComponents
 
     // ────────────────────────────────────────────────────────────────────────
@@ -262,23 +268,6 @@ public class MigratorPanel extends JFrame {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Arrastar janela sem barra de título
-    // ────────────────────────────────────────────────────────────────────────
-
-    private void addDragListeners(JComponent c) {
-        c.addMouseListener(new MouseAdapter() {
-            @Override public void mousePressed(MouseEvent e) {
-                mouseX = e.getX(); mouseY = e.getY();
-            }
-        });
-        c.addMouseMotionListener(new MouseAdapter() {
-            @Override public void mouseDragged(MouseEvent e) {
-                setLocation(e.getXOnScreen() - mouseX, e.getYOnScreen() - mouseY);
-            }
-        });
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
     // Migração
     // ────────────────────────────────────────────────────────────────────────
 
@@ -297,11 +286,50 @@ public class MigratorPanel extends JFrame {
         final File   finalFile = loadedSqlFile;
         final MigratorPanel self = this;
 
+        // Aviso: será feito um backup completo antes de migrar
+        int opcao = JOptionPane.showConfirmDialog(this,
+                "Antes da migração será gerado um BACKUP COMPLETO do banco '" + finalDb + "'\n"
+                + "na pasta do sistema. Dependendo do tamanho, pode levar alguns minutos.\n\n"
+                + "Deseja continuar?",
+                "Backup antes da migração", JOptionPane.OK_CANCEL_OPTION, JOptionPane.INFORMATION_MESSAGE);
+        if (opcao != JOptionPane.OK_OPTION) {
+            jTextArea1.append("[CANCELADO] Operação cancelada pelo usuário (backup não realizado).\n");
+            return;
+        }
+
         setControlesHabilitados(false);
-        jTextArea1.setText("[MIGRAÇÃO] Iniciando merge seguro...\n");
+        jTextArea1.setText("[BACKUP] Preparando backup do banco '" + finalDb + "'...\n");
+
+        // Popup modal com barra de progresso (indeterminada) durante backup + migração
+        final JDialog progresso = new JDialog(this, "Processando", true);
+        final JLabel lblStatus = new JLabel("Gerando backup do banco de destino...");
+        JProgressBar barra = new JProgressBar();
+        barra.setIndeterminate(true);
+        JPanel painel = new JPanel(new BorderLayout(10, 12));
+        painel.setBorder(BorderFactory.createEmptyBorder(18, 22, 18, 22));
+        painel.add(lblStatus, BorderLayout.NORTH);
+        painel.add(barra, BorderLayout.CENTER);
+        progresso.getContentPane().add(painel);
+        progresso.pack();
+        progresso.setSize(Math.max(380, progresso.getWidth()), progresso.getHeight());
+        progresso.setLocationRelativeTo(this);
+        progresso.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
 
         SwingWorker<MigrationReport, String> worker = new SwingWorker<MigrationReport, String>() {
             @Override protected MigrationReport doInBackground() throws Exception {
+                // ── 1) Backup completo do schema de destino (ponto de restauração) ──
+                File jarLoc = new File(MigratorPanel.class.getProtectionDomain()
+                        .getCodeSource().getLocation().toURI());
+                File pastaLc = jarLoc.getParentFile(); // pasta do lc_migracao.jar (pasta da LC)
+                String carimbo = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+                SchemaBackup backup = new SchemaBackup(
+                        appConfig.getDbHost(), appConfig.getDbPort(),
+                        appConfig.getDbUser(), appConfig.getDbPassword(),
+                        finalDb, pastaLc, msg -> publish(msg));
+                backup.executar(carimbo); // lança exceção se falhar → aborta a migração
+
+                // ── 2) Migração propriamente dita ──
+                publish("[MIGRAÇÃO] Iniciando merge seguro...");
                 Connection conn = dbManager.getConnection();
                 MigrationEngine engine = new MigrationEngine(conn, finalDb, finalFile, msg -> publish(msg));
                 engine.configurar(true, true, true, true, true, true, true);
@@ -311,9 +339,15 @@ public class MigratorPanel extends JFrame {
                 for (String msg : chunks) {
                     jTextArea1.append(msg + "\n");
                     jTextArea1.setCaretPosition(jTextArea1.getDocument().getLength());
+                    if (msg.startsWith("[BACKUP]")) {
+                        lblStatus.setText("Gerando backup do banco de destino...");
+                    } else if (msg.startsWith("[MIGRAÇÃO]") || msg.startsWith("[FASE") || msg.startsWith("[FASES")) {
+                        lblStatus.setText("Migrando dados...");
+                    }
                 }
             }
             @Override protected void done() {
+                progresso.dispose();
                 setControlesHabilitados(true);
                 try {
                     MigrationReport report = get();
@@ -325,12 +359,16 @@ public class MigratorPanel extends JFrame {
                         JOptionPane.showMessageDialog(self, "Migração com erros. Verifique o log.", "Atenção", JOptionPane.WARNING_MESSAGE);
                     }
                 } catch (Exception ex) {
-                    jTextArea1.append("\n[ERRO FATAL] " + ex.getMessage() + "\n");
-                    JOptionPane.showMessageDialog(self, "Erro: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
+                    Throwable causa = (ex.getCause() != null) ? ex.getCause() : ex;
+                    jTextArea1.append("\n[ERRO FATAL] " + causa.getMessage() + "\n");
+                    JOptionPane.showMessageDialog(self,
+                            "Falha antes/durante a migração (migração abortada):\n" + causa.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
                 }
             }
         };
         worker.execute();
+        progresso.setVisible(true); // modal: fecha em done()
     }
 
     private void setControlesHabilitados(boolean on) {
@@ -490,16 +528,8 @@ public class MigratorPanel extends JFrame {
 
     public static void aplicarTema() {
         try {
-            FlatLightLaf.setup();
-            UIManager.put("Component.arc", 6);
-            UIManager.put("Button.arc", 8);
-            UIManager.put("TextComponent.arc", 6);
-            UIManager.put("ComboBox.arc", 6);
-            UIManager.put("Component.focusColor", new Color(0x5C2380));
-            UIManager.put("TabbedPane.selectedBackground", new Color(0x5C2380));
-            UIManager.put("TabbedPane.selectedForeground", Color.WHITE);
-            UIManager.put("ScrollBar.thumbColor", new Color(0xC0B0D8));
-        } catch (Exception ex) { log.warn("Falha ao aplicar tema FlatLaf", ex); }
+            ThemeManager.apply();
+        } catch (Exception ex) { log.warn("Falha ao aplicar tema", ex); }
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
@@ -507,12 +537,11 @@ public class MigratorPanel extends JFrame {
     private javax.swing.JButton jButton2;
     private javax.swing.JButton jButton3;
     private javax.swing.JComboBox jComboBox1;
-    private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabelFilePath;
     private javax.swing.JLabel jLabelFilePath1;
-    private javax.swing.JPanel jPanelHeader;
     private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JSeparator jSeparator1;
     private javax.swing.JTextArea jTextArea1;
     private javax.swing.JTextField jTextFieldFilePath;
     // End of variables declaration//GEN-END:variables

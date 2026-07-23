@@ -18,7 +18,18 @@ public class AppConfig {
 
     public AppConfig() {
         props = new Properties();
-        loadConfig();
+        applyDefaults();
+        readFrom(getConfigFile());
+    }
+
+    /**
+     * Construtor de teste: carrega a configuração a partir de um arquivo
+     * explícito, sem depender da localização do .jar em execução.
+     */
+    AppConfig(File configFile) {
+        props = new Properties();
+        applyDefaults();
+        readFrom(configFile);
     }
 
     /**
@@ -36,7 +47,7 @@ public class AppConfig {
         }
     }
 
-    private void loadConfig() {
+    private void applyDefaults() {
         props.setProperty("IP", "localhost");
         props.setProperty("PORT", "3306");
         props.setProperty("USER", "");
@@ -44,8 +55,9 @@ public class AppConfig {
         props.setProperty("DB", "");
         props.setProperty("TERMINAL_TIPO", "");
         props.setProperty("ID_EMPRESA_PADRAO", "");
+    }
 
-        File configFile = getConfigFile();
+    private void readFrom(File configFile) {
         try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -77,6 +89,14 @@ public class AppConfig {
         
        
         return "jdbc:mysql://" + ip + ":" + port + "/";
+    }
+
+    public String getDbHost() {
+        return props.getProperty("IP");
+    }
+
+    public String getDbPort() {
+        return props.getProperty("PORT");
     }
 
     public String getDbUser() {

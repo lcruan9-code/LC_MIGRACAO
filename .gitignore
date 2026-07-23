@@ -16,3 +16,11 @@ nbproject/rede.txt
 
 # Arquivos não relacionados ao projeto
 migracao/
+*.rar
+*.zip
+*.tmp
+*.bak
+*.class
+.claude/
+/dist/backup_lc_sistemas_2026-07-23_15-17-03.sql
+/migracao/

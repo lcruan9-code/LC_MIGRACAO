@@ -13,7 +13,10 @@ import java.util.function.Consumer;
  *   Fase 2 – Tabelas lookup (categoria, ncm, etc.)  → AutoInc + Dedup por nome
  *   Fase 3 – Remap de FKs das tabelas-pai nas tabelas-filhas dentro do staging
  *   Fase 4 – Produto (OFFSET por id)
- *   Fase 5 – Tabelas dependentes (estoque, receber, pagar, pagamento)
+ *   Fase 5 – Tabelas dependentes (estoque, receber, pagar)
+ *
+ * Obs.: a tabela 'pagamento' (formas de pagamento) NÃO é migrada — o banco
+ * destino já é criado com as formas padrão (DINHEIRO, PIX, ...).
  *
  * LC_EXTRACAO_TABELAS_MIGRACAO, adaptada para execução direta via JDBC.
  *
@@ -72,6 +75,10 @@ public class MergeScriptBuilder {
     public void executar() throws SQLException {
         try (Statement stmt = connection.createStatement()) {
             exec(stmt, "SET SESSION group_concat_max_len = 1000000");
+            // Importação tolerante: sem STRICT, valores maiores que a coluna de
+            // destino (ex.: cliente.obs) são truncados ao tamanho da coluna (com
+            // aviso) em vez de abortar toda a migração com erro 1406.
+            exec(stmt, "SET SESSION sql_mode = ''");
             executarTabelasLookup(stmt);
             executarFornecedoresEClientes(stmt);
             executarProdutos(stmt);
@@ -108,20 +115,109 @@ public class MergeScriptBuilder {
                 "TRIM(d.codigo)=TRIM(s.codigo)", false, null);
         execAutoIncDedup(stmt, "cest",         "_map_cest",
                 "TRIM(d.cest)=TRIM(s.cest)", false, null);
+
+        // Antes de inserir os grupos de tributação, remapeia as FKs internas dele
+        // (ncm/cest/cst) para os novos IDs já mapeados no destino. Assim os grupos
+        // que ainda não existem são inseridos apontando para os registros corretos.
+        logger.accept("  → remap FKs internas do grupotributacao (ncm/cest/cst)...");
+        remapFkSeExistir(stmt, "grupotributacao", "id_ncm",  "_map_ncm");
+        remapFkSeExistir(stmt, "grupotributacao", "id_cest", "_map_cest");
+
+        // Mesmo defeito das extrações antigas do LC visto no produto: id_cest = 0
+        // (FK inválida) quando não há CEST. Normaliza para o cest '0000000' do
+        // destino antes do dedup, para os grupos novos entrarem corrigidos.
+        execUpdate(stmt,
+            "UPDATE `" + STG + "`.`grupotributacao` g" +
+            " JOIN (SELECT MIN(id) AS id FROM `cest` WHERE TRIM(cest)='0000000') c" +
+            " SET g.id_cest = c.id" +
+            " WHERE g.id_cest = 0 AND c.id IS NOT NULL");
+
+        remapFkSeExistir(stmt, "grupotributacao", "id_cst",  "_map_cst");
+
+        // Guarda o maior id de grupotributacao no destino ANTES de inserir os novos,
+        // para depois copiar a reforma (IBS/CBS) apenas dos grupos recém-criados.
+        exec(stmt, "SET @gtrib_maxid_antes := (SELECT IFNULL(MAX(id),0) FROM `grupotributacao`)");
+
         execAutoIncDedup(stmt, "grupotributacao", "_map_grupotributacao",
                 "TRIM(d.nome)=TRIM(s.nome) AND TRIM(d.uf)=TRIM(s.uf)", false, null);
+
+        // Reforma tributária: copia grupotributacaocclasstrib dos grupos novos
+        migrarReformaTributaria(stmt);
+    }
+
+    // ─── FASE 2c: Reforma tributária (IBS/CBS) ────────────────────────────────
+
+    /**
+     * Copia as linhas de {@code grupotributacaocclasstrib} (IBS/CBS) dos grupos
+     * de tributação recém-inseridos, remapeando as FKs. As tabelas de referência
+     * da RTC ({@code cclasstrib}, {@code cclasstribcst}, {@code cclasstribanexo})
+     * são apenas consultadas por chave natural no destino — nunca inseridas.
+     *
+     * <p>Só copia a reforma de grupos NOVOS (id maior que o {@code @gtrib_maxid_antes}
+     * capturado antes do insert), preservando a configuração já existente no destino.
+     *
+     * <p>Como cada linha já armazena o código {@code cclasstrib} e os valores de
+     * alíquota, o remap é feito direto contra as tabelas do destino, sem precisar
+     * das tabelas de referência da origem no staging.
+     */
+    private void migrarReformaTributaria(Statement stmt) throws SQLException {
+        if (!tabelaExisteNoStaging(stmt, "grupotributacaocclasstrib")) {
+            return; // dump sem reforma tributária — nada a migrar
+        }
+
+        logger.accept("[FASE 2c] Migrando reforma tributária (IBS/CBS) dos grupos novos...");
+
+        String selectComJoins =
+            " FROM `" + STG + "`.`grupotributacaocclasstrib` g" +
+            " JOIN `" + STG + "`.`_map_grupotributacao` mg ON mg.id_antiga = g.id_grupotributacao" +
+            " JOIN `" + STG + "`.`_map_ncm` mn ON mn.id_antiga = g.id_ncm" +
+            " JOIN `cclasstrib` dc ON TRIM(dc.cclasstrib) = TRIM(g.cclasstrib)" +
+            " LEFT JOIN `cclasstribcst` dccst ON dccst.cst = dc.cst" +
+            " LEFT JOIN `ncm` dn ON dn.id = mn.id_nova" +
+            " LEFT JOIN `cclasstribanexo` dca ON dca.id_cclasstrib = dc.id AND dca.ncm = dn.codigo" +
+            " WHERE mg.id_nova > @gtrib_maxid_antes";
+
+        exec(stmt,
+            "INSERT INTO `grupotributacaocclasstrib`" +
+            " (id_grupotributacao, id_naturezaoperacao, id_ncm, id_cclasstrib, id_cclasstribcst," +
+            "  cclasstrib, cbs_aliquota, cbs_reducao_aliquota, cbs_reducao_bc, cbs_aliquotadiferimento," +
+            "  cbs_amparolegal, ibs_aliquotauf, ibs_aliquotamun, ibs_reducao_aliquota, ibs_aliquotadiferimento," +
+            "  ibs_amparolegal, cbs_aliquotaadremmono, ibs_aliquotaadremmono, cbs_aliquotaadremmonoret," +
+            "  ibs_aliquotaadremmonoret, id_cclasstribanexo, ativo)" +
+            " SELECT mg.id_nova, g.id_naturezaoperacao, mn.id_nova, dc.id, dccst.id," +
+            "  g.cclasstrib, g.cbs_aliquota, g.cbs_reducao_aliquota, g.cbs_reducao_bc, g.cbs_aliquotadiferimento," +
+            "  g.cbs_amparolegal, g.ibs_aliquotauf, g.ibs_aliquotamun, g.ibs_reducao_aliquota, g.ibs_aliquotadiferimento," +
+            "  g.ibs_amparolegal, g.cbs_aliquotaadremmono, g.ibs_aliquotaadremmono, g.cbs_aliquotaadremmonoret," +
+            "  g.ibs_aliquotaadremmonoret, dca.id, g.ativo" +
+            selectComJoins);
+
+        int inseridos = queryInt(stmt, "SELECT COUNT(*)" + selectComJoins, 0);
+        report.addInserido("grupotributacaocclasstrib (reforma)", inseridos);
+        logger.accept("     reforma IBS/CBS → " + inseridos + " linhas copiadas.");
+
+        // Sinaliza grupos cujo cClassTrib da origem não existe no destino (pulados)
+        int semClass = queryInt(stmt,
+            "SELECT COUNT(*) FROM `" + STG + "`.`grupotributacaocclasstrib` g" +
+            " JOIN `" + STG + "`.`_map_grupotributacao` mg ON mg.id_antiga = g.id_grupotributacao" +
+            " LEFT JOIN `cclasstrib` dc ON TRIM(dc.cclasstrib) = TRIM(g.cclasstrib)" +
+            " WHERE mg.id_nova > @gtrib_maxid_antes AND dc.id IS NULL", 0);
+        if (semClass > 0) {
+            report.addAviso(semClass + " linha(s) de reforma puladas — cClassTrib não encontrado no destino.");
+        }
     }
 
     // ─── FASE 2b: Fornecedor e Cliente ────────────────────────────────────────
 
     private void executarFornecedoresEClientes(Statement stmt) throws SQLException {
         if (migrarFornecedores) {
+            // fornecedor usa a coluna 'cnpj_cpf' (invertida em relação a cliente)
             execClienteFornecedorDinamico(stmt, "fornecedor", "_map_fornecedor",
-                    true, "WHERE s.id NOT IN (1,2)", "@JOIN_FORNECEDOR");
+                    true, "WHERE s.id NOT IN (1,2)", "@JOIN_FORNECEDOR", "cnpj_cpf");
         }
         if (migrarClientes) {
+            // cliente usa 'cpf_cnpj'; ids 1 (CLIENTE FINAL) e 2 (SAIDAS) são de sistema
             execClienteFornecedorDinamico(stmt, "cliente", "_map_cliente",
-                    true, "WHERE s.id <> 1", "@JOIN_CLIENTE");
+                    true, "WHERE s.id NOT IN (1,2)", "@JOIN_CLIENTE", "cpf_cnpj");
         }
     }
 
@@ -138,7 +234,28 @@ public class MergeScriptBuilder {
         remapFkSeExistir(stmt, "produto", "id_cst",             "_map_cst");
         remapFkSeExistir(stmt, "produto", "id_ncm",             "_map_ncm");
         remapFkSeExistir(stmt, "produto", "id_cest",            "_map_cest");
+
+        // Extrações antigas do LC gravam id_cest = 0 (FK inválida) quando o
+        // produto não tem CEST. Normaliza para o cest '0000000' do destino,
+        // buscando por código para não depender do id.
+        execUpdate(stmt,
+            "UPDATE `" + STG + "`.`produto` p" +
+            " JOIN (SELECT MIN(id) AS id FROM `cest` WHERE TRIM(cest)='0000000') c" +
+            " SET p.id_cest = c.id" +
+            " WHERE p.id_cest = 0 AND c.id IS NOT NULL");
+
         remapFkSeExistir(stmt, "produto", "id_grupotributacao", "_map_grupotributacao");
+
+        // Unidades adicionais (atacado/embalagem) também referenciam 'unidade'
+        remapFkSeExistir(stmt, "produto", "id_unidadeatacado2",  "_map_unidade");
+        remapFkSeExistir(stmt, "produto", "id_unidadeatacado3",  "_map_unidade");
+        remapFkSeExistir(stmt, "produto", "id_unidadeatacado4",  "_map_unidade");
+        remapFkSeExistir(stmt, "produto", "id_unidadeembalagem", "_map_unidade");
+
+        // FK do produto para fornecedor — só remapeia se fornecedores foram migrados
+        if (migrarFornecedores) {
+            remapFkSeExistir(stmt, "produto", "id_fornecedor", "_map_fornecedor");
+        }
 
         logger.accept("[FASE 4] Inserindo produtos com OFFSET de ID...");
         execAppendOffset(stmt, "produto", "_map_produto", true, 100000L, null);
@@ -169,11 +286,12 @@ public class MergeScriptBuilder {
             execAppendOffset(stmt, "pagar", "_map_pagar", true, 0L, null);
         }
 
-        if (migrarPagamento && tabelaExisteNoStaging(stmt, "pagamento")) {
-            logger.accept("[FASE 5] Processando pagamentos...");
-            remapFkSeExistir(stmt, "pagamento", "id_receber", "_map_receber");
-            remapFkSeExistir(stmt, "pagamento", "id_pagar",   "_map_pagar");
-            execAppendOffset(stmt, "pagamento", "_map_pagamento", true, 0L, null);
+        if (migrarPagamento) {
+            // 'pagamento' no schema atual é a tabela de FORMAS de pagamento
+            // (DINHEIRO, PIX, ...), já criada no banco destino. Migrá-la
+            // duplicaria as formas padrão, por isso é intencionalmente ignorada.
+            logger.accept("[FASE 5] 'pagamento' ignorado — formas de pagamento já existem no destino.");
+            report.addAviso("Formas de pagamento não são migradas — o banco destino já possui as padrão.");
         }
     }
 
@@ -281,14 +399,14 @@ public class MergeScriptBuilder {
      */
     private void execClienteFornecedorDinamico(Statement stmt, String tabela,
             String mapTable, boolean forceEmpresa1, String whereStagingExtra,
-            String joinVar) throws SQLException {
+            String joinVar, String cpfCol) throws SQLException {
 
         if (!tabelaExisteNoStaging(stmt, tabela)) {
             report.addAviso("Tabela '" + tabela + "' não encontrada no staging — pulada.");
             return;
         }
 
-        logger.accept("  → dedup dinâmico: " + tabela);
+        logger.accept("  → dedup dinâmico: " + tabela + " (chave: " + cpfCol + ")");
 
         String varHasCpfStg = "@hascpf_" + tabela + "_stg";
         String varHasCpfDst = "@hascpf_" + tabela + "_dst";
@@ -296,15 +414,15 @@ public class MergeScriptBuilder {
         exec(stmt, "SET " + varHasCpfStg + " := (" +
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS" +
                 " WHERE TABLE_SCHEMA='" + STG + "' AND TABLE_NAME='" + tabela +
-                "' AND COLUMN_NAME='cpf_cnpj')");
+                "' AND COLUMN_NAME='" + cpfCol + "')");
 
         exec(stmt, "SET " + varHasCpfDst + " := (" +
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS" +
                 " WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='" + tabela +
-                "' AND COLUMN_NAME='cpf_cnpj')");
+                "' AND COLUMN_NAME='" + cpfCol + "')");
 
         exec(stmt, "SET " + joinVar + " := IF((" + varHasCpfStg + " > 0) AND (" + varHasCpfDst + " > 0)," +
-                "  '((NULLIF(TRIM(s.cpf_cnpj),\\'\\') IS NOT NULL AND NULLIF(TRIM(d.cpf_cnpj),\\'\\') = NULLIF(TRIM(s.cpf_cnpj),\\'\\')) OR (NULLIF(TRIM(s.cpf_cnpj),\\'\\') IS NULL AND TRIM(d.nome)=TRIM(s.nome)))'," +
+                "  '((NULLIF(TRIM(s." + cpfCol + "),\\'\\') IS NOT NULL AND NULLIF(TRIM(d." + cpfCol + "),\\'\\') = NULLIF(TRIM(s." + cpfCol + "),\\'\\')) OR (NULLIF(TRIM(s." + cpfCol + "),\\'\\') IS NULL AND TRIM(d.nome)=TRIM(s.nome)))'," +
                 "  '(TRIM(d.nome)=TRIM(s.nome))'" +
                 ")");
 
